@@ -1,0 +1,8 @@
+[project]
+name = "comfyui-nifty-nodes"
+version = "1.0.0"
+description = "A collection of useful utility nodes for ComfyUI."
+license = { file = "LICENSE" }
+
+[project.urls]
+Repository = "https://github.com/Stibo/comfyui-nifty-nodes"

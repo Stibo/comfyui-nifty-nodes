@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.gitignore text eol=lf
