@@ -1,10 +1,10 @@
 [project]
 name = "comfyui-nifty-nodes"
-version = "1.0.0"
-description = "A collection of useful utility nodes for ComfyUI."
+version = "2.0.0"
+description = "ComfyUI node pack with a custom Bundle system, smart media loaders, multi-LoRA loader, logic/switch nodes, image tools and more."
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
-dependencies = []
+dependencies = ["color-matcher", "imageio-ffmpeg"]
 
 [project.urls]
 Repository = "https://github.com/Stibo/comfyui-nifty-nodes"
