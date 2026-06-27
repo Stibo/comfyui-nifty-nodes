@@ -4,25 +4,69 @@ const NiftyHelpers = {
 	findNodes(args = {}) {
 		args = {
 			graph: app.graph,
-			title: null,
-			name: null,
+			title: [],
+			name: [],
 			...args
 		};
 
+		if(!Array.isArray(args.title)) {
+			args.title = [args.title];
+		}
+
+		if(!Array.isArray(args.name)) {
+			args.name = [args.name];
+		}
+
 		const result = [];
-		const hasTitleFilter = !!args.title;
-		const hasNameFilter = !!args.name;
+		const hasTitleFilter = args.title.length > 0;
+		const hasNameFilter = args.name.length > 0;
 
 		function traverse(nodes) {
 			for(const node of nodes) {
-				const matchesTitle = !hasTitleFilter || node.title === args.title;
-				const matchesName = !hasNameFilter || node.type === args.name || node.name === args.name;
+				const matchesTitle = !hasTitleFilter || args.title.includes(node.title);
+				const matchesName = !hasNameFilter || args.name.includes(node.type) || args.name.includes(node.name);
 
 				if((!hasTitleFilter && !hasNameFilter) || (matchesTitle && matchesName)) {
 					result.push(node);
 				}
 
 				if(node.subgraph && node.subgraph._nodes) {
+					traverse(node.subgraph._nodes);
+				}
+			}
+		}
+
+		traverse(args.graph._nodes);
+
+		return result;
+	},
+
+	findNodesByWidget(args = {}) {
+		args = {
+			graph: app.graph,
+			name: [],
+			...args
+		};
+
+		if(!Array.isArray(args.name)) {
+			args.name = [args.name];
+		}
+
+		const result = [];
+		const hasWidgetFilter = args.name.length > 0;
+
+		function traverse(nodes) {
+			for(const node of nodes) {
+				const widgets = Array.isArray(node.widgets) ? node.widgets : [];
+				const matchesWidget =
+					!hasWidgetFilter ||
+					widgets.some(widget => args.name.includes(widget?.name));
+
+				if(matchesWidget) {
+					result.push(node);
+				}
+
+				if(node.subgraph?._nodes) {
 					traverse(node.subgraph._nodes);
 				}
 			}
@@ -490,7 +534,7 @@ const NiftyDraw = {
 		ctx.fillStyle = args.disabled ? this.colors.inactive : this.colors.remove;
 		ctx.fill();
 		ctx.fillStyle = args.disabled ? this.colors.text2 : "#fff";
-		ctx.font = "bold 5px sans-serif";
+		ctx.font = "bold 7px sans-serif";
 		ctx.textAlign = "center";
 		ctx.textBaseline = "middle";
 		ctx.fillText("✕", args.x, args.y + 0.5);

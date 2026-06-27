@@ -181,8 +181,8 @@ def sniff_file(path):
 def snap_nearest_multiple(v, multiple):
     if multiple <= 1:
         return v
-
-    return max(multiple, round(v / multiple) * multiple)
+    snapped = (v // multiple) * multiple
+    return snapped if snapped > 0 else v
 
 
 def upscale_image(images, target_w, target_h, method):
@@ -308,6 +308,27 @@ async def resize_images(images, resize):
             "batch_size": int(result.shape[0]),
         }
 
+    def snap_result(result):
+        if divisible_by <= 1 or result is None or result.shape[0] == 0:
+            return result
+
+        if result.dim() == 3:
+            h = snap_nearest_multiple(int(result.shape[1]), divisible_by)
+            w = snap_nearest_multiple(int(result.shape[2]), divisible_by)
+            if h == result.shape[1] and w == result.shape[2]:
+                return result
+            y = max(0, (int(result.shape[1]) - h) // 2)
+            x = max(0, (int(result.shape[2]) - w) // 2)
+            return result[:, y : y + h, x : x + w]
+
+        h = snap_nearest_multiple(int(result.shape[1]), divisible_by)
+        w = snap_nearest_multiple(int(result.shape[2]), divisible_by)
+        if h == result.shape[1] and w == result.shape[2]:
+            return result
+        y = max(0, (int(result.shape[1]) - h) // 2)
+        x = max(0, (int(result.shape[2]) - w) // 2)
+        return result[:, y : y + h, x : x + w, :]
+
     source_images = images
     mode = resize.get("resize", "off")
 
@@ -409,12 +430,12 @@ async def resize_images(images, resize):
         target_px = target_w * target_h
 
         if scale_dir_mode == "upscale" and target_px <= orig_px:
-            return pack_result(source_images)
+            return pack_result(snap_result(source_images))
         if scale_dir_mode == "downscale" and target_px >= orig_px:
-            return pack_result(source_images)
+            return pack_result(snap_result(source_images))
 
     if target_w == orig_W and target_h == orig_H:
-        return pack_result(source_images)
+        return pack_result(snap_result(source_images))
 
     if scale_dir_mode == "upscale":
         scale_method = scale_method_up
@@ -437,9 +458,16 @@ async def resize_images(images, resize):
             and width > 0
             and height > 0
         ):
-            y = max(0, (result.shape[1] - height) // 2)
-            x = max(0, (result.shape[2] - width) // 2)
-            result = result[:, y : y + height, x : x + width, :]
+            crop_width = width
+            crop_height = height
+
+            if divisible_by > 1:
+                crop_width = snap_nearest_multiple(crop_width, divisible_by)
+                crop_height = snap_nearest_multiple(crop_height, divisible_by)
+
+            y = max(0, (result.shape[1] - crop_height) // 2)
+            x = max(0, (result.shape[2] - crop_width) // 2)
+            result = result[:, y : y + crop_height, x : x + crop_width, :]
 
         out.append(result)
 
@@ -449,6 +477,7 @@ async def resize_images(images, resize):
         )
 
     result = torch.cat(out, dim=0)
+    result = snap_result(result)
 
     if is_mask:
         result = result[..., 0]
