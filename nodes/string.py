@@ -1,3 +1,8 @@
+import os
+import hashlib
+import folder_paths
+from server import PromptServer
+from aiohttp import web
 from comfy_api.latest import io
 
 NODE_CATEGORY = "nifty/string"
@@ -163,19 +168,109 @@ class NiftyAnyToString(io.ComfyNode):
         delimiter = mode.get("delimiter", "-")
         pattern = mode.get("pattern", "$1")
 
-        str_values = {k: to_str(v) for k, v in values.items() if v is not None}
+        str_values = {k: to_str(v) for k, v in values.items()}
 
         if selected_mode == "delimiter":
             return io.NodeOutput(delimiter.join(str_values.values()))
         else:
             result = pattern
-            for i, v in enumerate(str_values.values()):
-                result = result.replace(f"${i+1}", v)
+            for k, v in str_values.items():
+                if k.startswith("value"):
+                    result = result.replace(f"${k[5:]}", v)
             return io.NodeOutput(result)
+
+
+# Dynamic Prompt
+def generate_dynamic_prompt(template: str, seed: int) -> str:
+    try:
+        from dynamicprompts.generators import RandomPromptGenerator
+        from dynamicprompts.wildcards import WildcardManager
+    except ImportError:
+        return template
+
+    wildcard_dir = os.path.join(
+        folder_paths.get_user_directory(), "default", "wildcards"
+    )
+
+    hash_seed = int(
+        hashlib.sha256(f"{template}::_{seed}_".encode("utf-8")).hexdigest(), 16
+    ) % (2**32 - 1)
+
+    try:
+        wm = WildcardManager(wildcard_dir)
+        generator = RandomPromptGenerator(
+            wildcard_manager=wm, unlink_seed_from_prompt=False
+        )
+        results = generator.generate(template, num_prompts=1, seeds=hash_seed)
+        return str(results[0]) if results else template
+    except Exception as e:
+        print(f"[NiftyDynamicPrompt] Error: {e}")
+        return template
+
+
+@PromptServer.instance.routes.post("/nifty/get_dynamic_prompt")
+async def api_get_dynamic_prompt(request):
+    data = await request.json()
+    template = data.get("template", "")
+    seed = data.get("seed", 0)
+    prompt = generate_dynamic_prompt(template, seed)
+    return web.json_response({"prompt": prompt})
+
+
+class NiftyDynamicPrompt(io.ComfyNode):
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="NiftyDynamicPrompt",
+            display_name="Nifty Dynamic Prompt",
+            category=NODE_CATEGORY,
+            description="Generates dynamic prompts using wildcard files and random variation syntax, with support for deterministic fixed seeds.",
+            search_aliases=[
+                "wildcard",
+                "prompt",
+                "dynamic",
+                "dynamic prompt",
+                "random prompt",
+                "random",
+                "deterministic",
+            ],
+            inputs=[
+                io.String.Input("prompt", multiline=True, socketless=True),
+                io.String.Input("template", multiline=True, socketless=True),
+                io.Boolean.Input("enabled", default=True),
+                io.Int.Input(
+                    "seed",
+                    default=0,
+                    min=0,
+                    max=1 << 50,
+                    control_after_generate=False,
+                ),
+                io.Custom("NIFTY_DYNAMIC_PROMPT_ACTIONS").Input("prompt_actions"),
+            ],
+            outputs=[
+                io.String.Output(id="prompt"),
+                io.String.Output(id="template"),
+                io.Int.Output(id="seed"),
+            ],
+        )
+
+    @classmethod
+    def execute(
+        cls, prompt: str, template: str, enabled: bool, seed: int, **kwargs
+    ) -> io.NodeOutput:
+        if not enabled:
+            return io.NodeOutput(prompt, template, seed)
+
+        final_prompt = (
+            prompt if prompt.strip() else generate_dynamic_prompt(template, seed)
+        )
+
+        return io.NodeOutput(final_prompt, template, seed)
 
 
 STRING_CLASSES = {
     "NiftyStringSplit": NiftyStringSplit,
     "NiftyStringJoin": NiftyStringJoin,
     "NiftyAnyToString": NiftyAnyToString,
+    "NiftyDynamicPrompt": NiftyDynamicPrompt,
 }
