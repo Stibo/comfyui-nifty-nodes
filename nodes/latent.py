@@ -176,11 +176,11 @@ class NiftyVAEEncode(io.ComfyNode):
                 with torch.no_grad():
                     test_out = vae.encode(test_slice)
 
-                if len(test_out.shape) == 5:
-                    L = test_out.shape[2]
-                    factor = (test_count - 1) // (L - 1) if L > 1 else 8
-                elif len(test_out.shape) == 4:
-                    factor = 1
+            if len(test_out.shape) == 5:
+                L = test_out.shape[2]
+                factor = (test_count - 1) // (L - 1) if L > 1 else 8
+            elif len(test_out.shape) == 4:
+                factor = 1
         except Exception:
             factor = 4
 
@@ -189,10 +189,13 @@ class NiftyVAEEncode(io.ComfyNode):
     @classmethod
     async def execute(
         cls,
-        pixels: io.Image.Type,
+        pixels: io.Image.Type | None,
         vae: io.Vae.Type,
         target_latents: int,
     ) -> io.NodeOutput:
+        if pixels is None:
+            return io.NodeOutput(None, None)
+
         frames = pixels[..., :3]
 
         if target_latents != 0:
