@@ -336,6 +336,7 @@ class NiftyResizeImage(io.ComfyNode):
 
 
 # Image Color Match
+# Fork from KJNodes, thanks to kijai for this awesome node!
 class NiftyImageColorMatch(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:

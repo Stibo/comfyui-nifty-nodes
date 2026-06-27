@@ -127,7 +127,7 @@ export class NiftyNode {
 			}) 
 
 			// Hide widgets
-			if(this.args.hideWidgets) {
+			if(this.args.hideWidgets.length) {
 				this.args.hideWidgets.forEach((name) => {
 					this.hideWidget(node, name);
 				});
@@ -412,7 +412,11 @@ export class NiftyNode {
 					}
 				} else {
 					if(args.syncType) {
-						node.addOutput(slotName, node.outputs[0].type);
+						if(args.type === ":first") {
+							args.type = node.outputs[0].type;
+						}
+
+						node.addOutput(slotName, args.type);
 					} else {
 						node.addOutput(slotName, args.type);
 					}

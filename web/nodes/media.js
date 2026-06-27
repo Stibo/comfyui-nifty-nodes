@@ -74,7 +74,7 @@ window.Image = class extends OrigImage {
 };
 
 app.registerExtension({
-	name: "comfyui.nifty.nodes.loader-media",
+	name: "comfyui.nifty.nodes.media",
 
 	async beforeRegisterNodeDef(nodeType, nodeData) {		
 		// Load & Resize (Image, Video, Media)
