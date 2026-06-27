@@ -56,7 +56,8 @@ app.registerExtension({
                     min: 1,
                     max: 32,
 					trigger: "widget",
-					widget: "count"
+					widget: "count",
+					type: "*"
                 }
 			});
 

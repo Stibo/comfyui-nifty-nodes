@@ -33,7 +33,7 @@ def set_bundle_value(data, key_path, value):
         current[keys[-1]] = value
 
 
-# Bundle pack
+# Bundle Pack
 class NiftyBundlePack(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
@@ -113,7 +113,7 @@ class NiftyBundlePack(io.ComfyNode):
         return io.NodeOutput(result)
 
 
-# Bundle unpack
+# Bundle Unpack
 class NiftyBundleUnpack(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
@@ -214,7 +214,7 @@ class NiftyBundleGet(io.ComfyNode):
         )
 
 
-# Bundle set
+# Bundle Set
 class NiftyBundleSet(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
