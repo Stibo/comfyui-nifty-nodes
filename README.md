@@ -22,10 +22,13 @@ pip install color-matcher # additional color transfer methods in Image Color Mat
 
 - **ComfyUI v3 native** — built entirely on the `comfy_api.latest` API with proper `define_schema`, lazy evaluation, `fingerprint_inputs` caching and async execution where applicable
 - **Bundle system** — pass any number of named values through a single BUNDLE wire, with dot-notation support for nested structures
-- **Smart media loaders** — load images, videos or both with an integrated resize pipeline and optional frame rate control
-- **Multi-LoRA loader** — manage an entire LoRA stack in one node with per-row enable/disable and strength controls
-- **Full logic suite** — lazy and eager input switches, output routers, boolean operators, string/number comparisons and more
+- **Smart media loaders** — load images, videos or both with an integrated resize pipeline, optional frame rate control and embedded meta bundle extraction; use Embed Media Meta Bundle to inject metadata into saved PNGs
+- **Multi-LoRA loader** — manage an entire LoRA stack in one node with per-row enable/disable and strength controls; or build reusable stacks with Lora Stack and Apply nodes
+- **Full logic suite** — lazy and eager input switches, output routers, indexed combo switches, boolean operators, string/number comparisons and more
 - **Image Color Match** — 10 color transfer methods including GPU-accelerated options, batch multithreading and selective channel transfer
+- **Model guidance** — WAN-native NAG (Normalized Attention Guidance) and SLG/STG nodes for WAN 2.1 / 2.2 video models
+- **CLIP Text Encode** — combined positive/negative prompt encoding in a single node
+- **Dynamic Prompt** — wildcard-based prompt generation with deterministic seeds, powered by the `dynamicprompts` library
 - **Search aliases** on every node for fast discovery via the node search
 
 ---
@@ -130,7 +133,7 @@ Bundle Pack accepts an optional incoming Bundle. Any values you pack are merged 
 
 ---
 
-### Media Loader
+### Media
 
 #### Load & Resize Media
 
@@ -155,6 +158,7 @@ The most versatile loader — accepts images **and** videos in a single node, wi
 | frame_rate | INT | Frame rate of the source (or the forced rate if set). |
 | audio | AUDIO | Extracted audio track. Silent if the file has no audio. |
 | **is_video** | BOOL | **True if the loaded file is a video or animation, False for still images.** |
+| meta_bundle | BUNDLE | Meta bundle embedded in the file's PNG metadata, if any. Empty dict if none found. |
 
 #### Load & Resize Video
 
@@ -175,6 +179,25 @@ Same as Load & Resize Media but restricted to image and animation file types. No
 | IMAGE | IMAGE | Loaded image as a tensor. `None` if file is `none`. |
 | width | INT | Output width after any resize. |
 | height | INT | Output height after any resize. |
+| meta_bundle | BUNDLE | Meta bundle embedded in the file's PNG metadata, if any. Empty dict if none found. |
+
+#### Embed Media Meta Bundle
+
+Injects a `BUNDLE` dict into the workflow's `extra_pnginfo` so it gets embedded into any PNG saved downstream. Place this node in the wire between a loader and a Save Image node. Passes the input value through unchanged.
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| input | ANY | Yes | — | Any value to pass through unchanged. |
+| meta_bundle | BUNDLE | Yes | — | The bundle to embed into the saved PNG metadata. |
+| mode | COMBO | No | overwrite | **overwrite** = replace any existing `meta_bundle` entirely. **merge** = combine with an existing bundle — new keys override old ones, keys not present in the new bundle are kept. |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| output | ANY | The `input` value, passed through unchanged. |
 
 ##### Resize Modes
 
@@ -206,7 +229,7 @@ All modes include a `divisible_by` option and separate scale method selectors fo
 
 ---
 
-### Lora Loader
+### Lora
 
 #### Nifty Lora Loader
 
@@ -217,7 +240,7 @@ Applies a full LoRA stack to a model and CLIP in one node. Each row has its own 
 | Name | Type | Required | Default | Description |
 |---|---|---|---|---|
 | model | MODEL | Yes | — | Base model to apply LoRAs to. |
-| clip | CLIP | Yes | — | CLIP model to apply LoRAs to. |
+| clip | CLIP | No | — | CLIP model to apply LoRAs to. |
 | loras | NIFTY_LORA_LOADER | Yes | — | LoRA stack widget. Add rows, pick a LoRA file, set strength and toggle enabled. **Strength 1.0 = full effect, 0.5 = half, negative values invert.** |
 
 ##### Outputs
@@ -226,6 +249,130 @@ Applies a full LoRA stack to a model and CLIP in one node. Each row has its own 
 |---|---|---|
 | MODEL | MODEL | Model with all enabled LoRAs applied in order. |
 | CLIP | CLIP | CLIP with all enabled LoRAs applied in order. |
+
+#### Nifty Lora Stack
+
+Builds a reusable `NIFTY_LORA_STACK` wire that can be passed to Nifty Apply Lora Stack. Accepts an optional incoming stack to chain multiple Lora Stack nodes together — new rows are appended. Rows with strength `0.0` or disabled are skipped.
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| lora_stack | NIFTY_LORA_STACK | No | — | Existing stack to extend. New rows are appended after it. |
+| loras | NIFTY_LORA_LOADER | Yes | — | LoRA stack widget. Add rows, pick a LoRA file, set strength and toggle enabled. **Strength 1.0 = full effect, 0.5 = half, negative values invert.** |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| lora_stack | NIFTY_LORA_STACK | Combined LoRA stack ready to be passed to Nifty Apply Lora Stack. |
+
+#### Nifty Apply Lora Stack
+
+Applies a `NIFTY_LORA_STACK` to a model and optional CLIP. Separates stack definition from application — useful when the same stack needs to be applied to multiple models or at different points in a workflow.
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| lora_stack | NIFTY_LORA_STACK | Yes | — | The LoRA stack to apply. |
+| model | MODEL | Yes | — | Base model to apply LoRAs to. |
+| clip | CLIP | No | — | CLIP model to apply LoRAs to. |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| MODEL | MODEL | Model with all LoRAs from the stack applied in order. |
+| CLIP | CLIP | CLIP with all LoRAs from the stack applied in order. |
+
+---
+
+### Conditioning
+
+#### Nifty CLIP Text Encode (Prompt)
+
+Encodes positive and negative text prompts using a CLIP model in a single node. Both outputs are `CONDITIONING` wires ready for a sampler.
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| clip | CLIP | Yes | — | The CLIP model used for encoding the text. |
+| positive | STRING | No | `` | Positive text prompt. Leave empty for an unconditional embedding. |
+| negative | STRING | No | `` | Negative text prompt. Leave empty for an unconditional embedding. |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| positive | CONDITIONING | Positive conditioning from the encoded prompt. |
+| negative | CONDITIONING | Negative conditioning from the encoded prompt. |
+
+---
+
+### Model
+
+WAN-specific model patching nodes. Both are marked experimental and live in the `nifty/model` category.
+
+#### Wan Video NAG
+
+Applies **Normalized Attention Guidance** (NAG, NeurIPS 2025) to WAN 2.1 / 2.2 video models (T2V and I2V). Replaces or complements CFG by applying guidance directly in attention space — stable at low step counts. Forked and significantly reworked from KJNodes.
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| enable | BOOL | No | True | When `False`, model and conditioning pass through unchanged. |
+| model | MODEL | Yes | — | WAN model to patch. |
+| conditioning | CONDITIONING | Yes | — | **Negative** conditioning (empty or negative prompt). NAG uses this as its internal reference — the direction guidance is pushed **away from** in attention space. Do not connect positive conditioning here. |
+| nag_scale | FLOAT | No | 11.0 | Guidance strength (φ), analogous to CFG scale. Good range: 8–15. `0` disables NAG. Tune last — settle on `nag_tau` and `nag_alpha` first. |
+| nag_alpha | FLOAT | No | 0.25 | Blend weight (α) between NAG-guided and original positive attention. `0` = no effect, `1` = full NAG. Lower for I2V (0.10–0.20) to preserve the reference image. |
+| nag_tau | FLOAT | No | 2.5 | L1-norm clipping threshold (τ): caps how far guided attention deviates from positive attention. Lower = safer. Higher = stronger. Lower for I2V (1.5–2.0); higher for few-step Lightning LoRA (3–5). |
+| nag_sigma_end | FLOAT | No | 0.0 | NAG is skipped when sigma drops below this value. `0.0` = always active (correct for two-model HN/LN pipelines). For single-model pipelines, `0.75` gives near-identical quality with less compute. |
+| nag_scale_end | FLOAT | No | 0.0 | Adaptive scale end: linearly interpolates from `nag_scale` (sigma=1.0) to this value (sigma=0.0). `0.0` = disabled (constant scale). |
+| input_type | COMBO | No | default | **default** = sampler sends a [positive, negative] batch pair (standard CFG). **batch** = single conditioning without a paired negative (use for CFG=1 / few-step WAN with Lightning LoRA). |
+| inplace | BOOL | No | False | Modify tensors in-place to reduce peak VRAM. Slightly alters numerical results — enable only if out of memory. |
+| cond_zero_out | BOOL | No | True | Output a zeroed neutral conditioning instead of the input conditioning. Recommended — NAG handles guidance internally so the sampler's negative slot should be empty to avoid interference. Disable only if intentionally stacking NAG on top of CFG. |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| MODEL | MODEL | Patched model with NAG applied to every cross-attention block. |
+| CONDITIONING | CONDITIONING | The input conditioning, zeroed out if `cond_zero_out` is `True`. |
+
+##### Recommended Starting Values
+
+| Scenario | nag_scale | nag_tau | nag_alpha |
+|---|---|---|---|
+| T2V multi-step | 11 | 2.5 | 0.25 |
+| T2V few-step (Lightning LoRA) | 11–15 | 2.5–5 | 0.25–0.5 |
+| I2V (any) | 11 | 1.5–2.0 | 0.10–0.20 |
+
+#### Nifty Wan Video SLG
+
+Applies **Spatiotemporal Skip Guidance** (STG / SLG) to WAN video models. No TeaCache required. Works at CFG=1 (e.g. LightX2V). Paper: arxiv 2411.18664 (CVPR 2025). Forked and significantly reworked from KJNodes.
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| enabled | BOOL | No | True | When `False`, the model is passed through unchanged. |
+| model | MODEL | Yes | — | WAN model to patch. |
+| blocks | STRING | No | `9, 10` | Comma-separated block indices. Supports ranges (`9-11` = 9, 10, 11). WAN 2.2 has 40 layers. Blocks 9, 10 are empirically recommended. Start with `10` alone if flickering occurs. |
+| mode | COMBO | No | STG-A | **STG-A** — zeros self-attention only (cross-attn and FFN still run). Less perturbation, lower flickering risk. Recommended for WAN + few-step. **STG-R** — entire block becomes identity. Stronger but more prone to flickering at 2–3 steps. |
+| scale | FLOAT | No | 1.0 | Guidance strength. Works at CFG=1. LightX2V (2–3 HN steps): STG-A max ~2.0–2.5, STG-R max ~1.5. |
+| start_percent | FLOAT | No | 0.0 | Start of active range as a fraction of the **full** denoising schedule (HN + LN combined). Percentages are absolute. |
+| end_percent | FLOAT | No | 1.0 | End of active range. Formula: `HN_steps / total_steps`. 4-step (2+2): 0.5. Default 1.0 = active for all sigmas this model processes. |
+| rescaling_scale | FLOAT | No | 0.0 | Normalises correction std to match cond_pred std before applying scale. `0.0` = disabled. `0.3–0.5` recommended if scale causes flickering. |
+| scale_end | FLOAT | No | 0.0 | Adaptive scale end: interpolates from `scale` at `start_percent` to `scale_end` at `end_percent`. `0.0` = disabled (constant scale). |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| MODEL | MODEL | Model with a `post_cfg_function` patched in to apply STG on each sampler step. |
 
 ---
 
@@ -454,7 +601,7 @@ Each returns one of two primitive values based on a boolean.
 
 #### Combo Switch
 
-Switches between two combo (dropdown) values based on a boolean. Each side has its own options list, defined as a pipe-separated string (`option1|option2|option3`). Also outputs the index of the selected value within its option list.
+Switches between two combo (dropdown) values based on a boolean. Each side has its own options list, defined as a pipe-separated string (`option1|option2|option3`). Also outputs the selected value as a STRING and the index within its option list.
 
 ##### Inputs
 
@@ -471,7 +618,33 @@ Switches between two combo (dropdown) values based on a boolean. Each side has i
 | Name | Type | Description |
 |---|---|---|
 | COMBO | COMBO | Selected combo value. |
+| string | STRING | The selected combo value as a string. |
 | index | INT | Index of the selected value within its option list. `-1` if not found. |
+
+#### Index Combo Switch
+
+Like Index Input Switch but selects the active branch via a named dropdown instead of a raw integer. Each branch gets a custom label defined by the `option1`–`option16` string inputs — the dropdown (`choise`) is built from those labels at runtime. **Lazy** — only the selected branch is evaluated.
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| values | ANY | No | — | Auto-growing input list. Only the selected branch is evaluated (lazy). |
+| choise | COMBO | Yes | — | Dropdown showing the labels defined by `option1`–`option16`. |
+| option1 … option16 | STRING | No | `Option N` | Label for each corresponding `value` input. Defines the available dropdown options. |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| output | ANY | Value of the selected branch, or `None` if not connected. |
+| COMBO | COMBO | The selected label as a COMBO value. |
+| string | STRING | The selected label as a string. |
+| index | INT | 0-based index of the selected option. `-1` if not found. |
+
+#### Index Combo Switch (Eager)
+
+Same as Index Combo Switch but all inputs are always evaluated regardless of which option is selected.
 
 #### Boolean AND / OR / XOR
 
@@ -519,16 +692,16 @@ Transfers the color distribution of a reference image onto a target image. Suppo
 
 | Method | Notes |
 |---|---|
-| **mkl** | Monge-Kantorovich linear map — accurate and general purpose, recommended default |
-| **reinhard_lab** | Fast statistical match in LAB color space — CPU |
-| **reinhard_lab_gpu** | Same as above but GPU-accelerated — requires `kornia` |
-| **wavelet** | Structure-preserving, transfers low-frequency color info — good for textures |
-| **adain** | Adaptive instance normalisation — fast, works well for style-like transfers |
-| hm | Histogram matching |
-| reinhard | Classic Reinhard RGB |
-| mvgd | Multivariate Gaussian — requires `color-matcher` |
-| hm-mvgd-hm | Histogram + MVGD combo — requires `color-matcher` |
-| hm-mkl-hm | Histogram + MKL combo — requires `color-matcher` |
+| **mkl** | Monge-Kantorovich linear map — **best overall quality, recommended default** for most use cases |
+| **reinhard_lab** | Fast statistical LAB match — **good for natural/photographic content** where speed matters. CPU only |
+| **reinhard_lab_gpu** | Same quality as reinhard_lab but GPU-accelerated — **prefer this over reinhard_lab when kornia is available**. Requires `kornia` |
+| **wavelet** | Transfers low-frequency color while preserving structure — **best when texture and fine detail must stay intact** |
+| **adain** | Adaptive instance normalisation — **fast and consistent**, well suited for video/animation frame batches |
+| hm | Histogram matching — **fast broad tonal correction**, less accurate for complex or saturated palettes |
+| reinhard | Classic Reinhard RGB — **quick and simple**, struggles with complex colour distributions |
+| mvgd | Multivariate Gaussian — **high-accuracy statistical match**, good complement to mkl for tricky scenes. Requires `color-matcher` |
+| hm-mvgd-hm | Histogram + MVGD combo — **robust for challenging distributions** when mkl alone falls short. Requires `color-matcher` |
+| hm-mkl-hm | Histogram + MKL combo — **highest overall quality** among the combo methods. Requires `color-matcher` |
 
 #### Merge Image Batches
 
@@ -690,6 +863,26 @@ Shortcut to take the last N latents from a batch.
 
 ---
 
+### Sampling
+
+#### Nifty Random Noise
+
+Generates reproducible random noise from a seed for use with advanced sampler nodes that accept a `NOISE` input.
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| seed | INT | No | 0 | Seed value for noise generation (0–1125899906842624). |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| NOISE | NOISE | Noise object ready for use in an advanced KSampler node. |
+
+---
+
 ### Selectors
 
 Lightweight selector nodes that output a filename or name string. They exist to keep your actual loader nodes clean — connect these to a loader and swap models or settings without touching the loader itself.
@@ -715,6 +908,16 @@ Selects a CLIP / text encoder model file from the `clip` / `text_encoders` folde
 |---|---|---|
 | clip | ANY | Selected model filename string. |
 | is_gguf | BOOL | `True` if the selected file has a `.gguf` extension. |
+
+#### CLIP Type Selector
+
+Selects a CLIP type string from a dropdown. Covers all model families supported by ComfyUI's dual-CLIP loader (`stable_diffusion`, `wan`, `flux2`, `sd3`, and many more). Connect the output to a CLIP loader's `type` input.
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| type | ANY | The selected CLIP type as a string. |
 
 #### Sampler Selector
 
@@ -779,6 +982,35 @@ Joins a list of strings into a single string.
 | Name | Type | Description |
 |---|---|---|
 | string | STRING | Joined string. |
+
+#### Nifty Dynamic Prompt
+
+Generates a resolved prompt string from a template using the [`dynamicprompts`](https://pypi.org/project/dynamicprompts/) library. Supports wildcard files, random choices, weighted variants, combinatorial expansion and more — see the dynamicprompts documentation for the full syntax.
+
+**Wildcards** are text files containing one option per line. Place them in your ComfyUI user directory at `user/default/wildcards/` (create the folder if it doesn't exist). Reference them in your template with double underscores: `__style__` loads `user/default/wildcards/style.txt`. Subdirectories work too: `__artists/painters__` loads `user/default/wildcards/artists/painters.txt`.
+
+The `seed` input makes generation deterministic — the same template and seed always produce the same result. If `dynamicprompts` is not installed, the template is returned unchanged.
+
+The `prompt` field acts as a manual override: if it contains text, it is passed through directly without running the generator. Clear it to re-generate from `template`.
+
+See full syntax reference: https://pypi.org/project/dynamicprompts/
+
+##### Inputs
+
+| Name | Type | Required | Default | Description |
+|---|---|---|---|---|
+| prompt | STRING | No | `` | Manual prompt override (socketless). If non-empty, bypasses the template generator and passes this value through directly. |
+| template | STRING | No | `` | Dynamic prompt template (socketless). Used when `prompt` is empty. Supports wildcard syntax, `{a\|b\|c}` choices, weights, ranges and more. |
+| enabled | BOOL | No | True | When `False`, `prompt` and `template` pass through unchanged without generation. |
+| seed | INT | No | 0 | Deterministic seed. Same template + seed always produces the same output. |
+
+##### Outputs
+
+| Name | Type | Description |
+|---|---|---|
+| prompt | STRING | The resolved final prompt string. |
+| template | STRING | The original template, passed through unchanged. |
+| seed | INT | The seed value, passed through unchanged. |
 
 ---
 

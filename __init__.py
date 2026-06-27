@@ -7,8 +7,11 @@ from .nodes.logic import LOGIC_CLASSES
 from .nodes.string import STRING_CLASSES
 from .nodes.number import NUMBER_CLASSES
 from .nodes.selector import SELECTOR_CLASSES
-from .nodes.loader_media import LOADER_MEDIA_CLASSES
-from .nodes.loader_lora import LOADER_LORA_CLASSES
+from .nodes.media import MEDIA_CLASSES
+from .nodes.lora import LORA_CLASSES
+from .nodes.model import MODEL_CLASSES
+from .nodes.conditioning import CONDITIONING_CLASSES
+from .nodes.sampling import SAMPLING_CLASSES
 from .nodes.utils import UTILS_CLASSES
 
 WEB_DIRECTORY = "./web"
@@ -25,8 +28,11 @@ class NiftyNodesExtension(ComfyExtension):
                 **STRING_CLASSES,
                 **NUMBER_CLASSES,
                 **SELECTOR_CLASSES,
-                **LOADER_MEDIA_CLASSES,
-                **LOADER_LORA_CLASSES,
+                **MEDIA_CLASSES,
+                **LORA_CLASSES,
+                **MODEL_CLASSES,
+                **CONDITIONING_CLASSES,
+                **SAMPLING_CLASSES,
                 **UTILS_CLASSES,
             }.values()
         )
