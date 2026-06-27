@@ -3,6 +3,8 @@ import { api } from "../../../scripts/api.js";
 import { NiftyNode } from "../core/node.js";
 import { NiftyHelpers, NiftyDraw } from "../core/helpers.js";
 
+const loraStackTypeColor = "#94dccd"; // #7892e7, #69dfd9,
+
 let _loraCache = null;
 
 async function getLoraList() {
@@ -36,6 +38,8 @@ function resizeAfterRowChange(innerNode, subgraphNode, delta) {
 	if(subgraphNode && subgraphNode !== innerNode) {
 		subgraphNode.setSize([subgraphNode.size[0], subgraphNode.size[1] + delta]);
 	}
+
+	// @todo: correctly handle collapsed node
 
 	app.canvas.setDirty(true);
 }
@@ -274,6 +278,20 @@ const loraLoader = {
 				...menu.root.querySelectorAll(".litemenu-entry")
 			];
 
+			const menuFilter = menu.root.querySelector('.comfy-context-menu-filter');
+
+			if(menuFilter) {
+				menuFilter.style.position = "sticky";
+				menuFilter.style.top = "0px";
+			}
+
+			const menuTitle = menu.root.querySelector('.litemenu-title');
+
+			if(menuTitle) {
+				menuTitle.style.position = "sticky";
+				menuTitle.style.top = "19px";
+			}
+
 			items.forEach(el => {
 				el.style.removeProperty("background-color");
 				el.style.removeProperty("color");
@@ -342,7 +360,7 @@ const loraLoader = {
 };
 
 app.registerExtension({
-	name: "comfyui.nifty.nodes.loader-lora",
+	name: "comfyui.nifty.nodes.lora",
 
 	async getCustomWidgets(app) {
 		getLoraList();
@@ -480,7 +498,13 @@ app.registerExtension({
 							},
 
 							lora: (row) => {
-								loraLoader.updateLora.call(this, row, event, "lora", "Select a lora");
+								loraLoader.updateLora.call(
+									this,
+									row,
+									event,
+									"lora",
+									this._node.properties?.context_title?.trim() || "Select a lora"
+								);
 							},
 			
 							remove: (row, rowIndex, section) => {
@@ -511,17 +535,18 @@ app.registerExtension({
 
 	async beforeRegisterNodeDef(nodeType, nodeData) {
 		// Lora Loader
-		if(nodeData.name === "NiftyLoraLoader") {
-			const LoraLoader = new NiftyNode(nodeType, nodeData, {
+		if(["NiftyLoraLoader", "NiftyLoraStack"].includes(nodeData.name)) {
+			const LoraStack = new NiftyNode(nodeType, nodeData, {
 				width: 400,
 				removeInputs: ["loras", "add_row"],
 				properties: [
 					["min_rows", 1, "string"],
-					["button_label", "", "string"]
+					["button_label", "", "string"],
+					["context_title", "", "string"],
 				],
 			});
 
-			LoraLoader.applyHook("onNodeCreated", function(node) {
+			LoraStack.applyHook("onNodeCreated", function(node) {
 				const buttonWidget = node.addWidget("button", "add_lora", null, function(value, canvas, currentNode, pos, event) {
 					const partner = NiftyHelpers.getWidget(this._node, "loras");
 
@@ -565,7 +590,7 @@ app.registerExtension({
 				}
 			});
 
-			LoraLoader.applyHook("onAfterGraphConfigured", function(node) {
+			LoraStack.applyHook("onAfterGraphConfigured", function(node) {
 				let minRowsValue = node.properties.min_rows ?? 1;
 				minRowsValue = isNaN(minRowsValue) ? 1 : parseInt(minRowsValue);
 
@@ -579,24 +604,38 @@ app.registerExtension({
 				}
 			});
 
-			LoraLoader.applyHook("onPropertyChanged", function(node, name, value) {
-				if(name === "min_rows") {
-					let minRowsValue = isNaN(value) ? 1 : parseInt(value);
-					const minRows = Math.max(0, minRowsValue);
-					const paramsWidget = this.getWidgetByType(node, "NIFTY_LORA_LOADER");
+			LoraStack.applyHook("onPropertyChanged", function(node, name, value) {
+				switch (name) {
+					case "min_rows":
+						let minRowsValue = isNaN(value) ? 1 : parseInt(value);
+						const minRows = Math.max(0, minRowsValue);
+						const paramsWidget = this.getWidgetByType(node, "NIFTY_LORA_LOADER");
 
-					node.properties.min_rows = minRows;
+						node.properties.min_rows = minRows;
 
-					if(paramsWidget) {
-						paramsWidget.setMinRows(minRows);
-					}
-				}
+						if(paramsWidget) {
+							paramsWidget.setMinRows(minRows);
+						}
 
-				if(name === "button_label") {
-					node.properties.button_label = value;
-					app.canvas.setDirty(true);
+						break;
+
+					case "button_label":
+						node.properties.button_label = value;
+						app.canvas.setDirty(true);
+
+						break;
+
+					case "context_title":
+						node.properties.context_title = value;
+	
+						break;
 				}
 			});
 		}
-	}
+	},
+
+	async afterConfigureGraph(arg, app) {
+		app.canvas.constructor.link_type_colors["NIFTY_LORA_STACK"] = loraStackTypeColor;
+		app.canvas.default_connection_color_byType["NIFTY_LORA_STACK"] = loraStackTypeColor;
+	},
 });
