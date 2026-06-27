@@ -1051,6 +1051,7 @@ class NiftyComboSwitch(io.ComfyNode):
             ],
             outputs=[
                 io.Combo.Output(),
+                io.String.Output(),
                 io.Int.Output(id="index"),
             ],
         )
@@ -1079,6 +1080,232 @@ class NiftyComboSwitch(io.ComfyNode):
 
         return io.NodeOutput(
             selected,
+            selected,
+            index,
+        )
+
+
+# Index Combo Switch
+class NiftyIndexComboSwitch(io.ComfyNode):
+    MAX_VALUES = 16
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        switch_template = io.MatchType.Template("switch")
+
+        autogrow_template = io.Autogrow.TemplateNames(
+            input=io.MatchType.Input(
+                "value", template=switch_template, lazy=True, optional=True
+            ),
+            names=[f"value{i+1}" for i in range(cls.MAX_VALUES)],
+            min=2,
+        )
+
+        return io.Schema(
+            node_id="NiftyIndexComboSwitch",
+            display_name="Index Combo Switch",
+            category=NODE_CATEGORY,
+            is_experimental=True,
+            search_aliases=[
+                "index input switch",
+                "indexed switch",
+                "select by index",
+                "multi input switch",
+                "numbered switch",
+                "index select",
+                "combo switch",
+                "boolean combo",
+                "conditional combo",
+                "select combo",
+                "dropdown switch",
+            ],
+            inputs=[
+                io.Autogrow.Input(
+                    "values",
+                    template=autogrow_template,
+                    lazy=True,
+                    optional=True,
+                    tooltip="Auto-growing list of inputs. Only the selected index is evaluated (lazy).",
+                ),
+                io.Combo.Input(
+                    "choise",
+                    options=[],
+                    default="",
+                    tooltip=f"Which value input to pass through, the order matches. The first choise = value1, second choise = value2 etc.",
+                ),
+                *[
+                    io.String.Input(
+                        f"option{i+1}",
+                        default=f"Option {i+1}",
+                        optional=True,
+                    )
+                    for i in range(cls.MAX_VALUES)
+                ],
+            ],
+            outputs=[
+                io.MatchType.Output(id="output", template=switch_template),
+                io.Combo.Output(),
+                io.String.Output(),
+                io.Int.Output(id="index"),
+            ],
+        )
+
+    @staticmethod
+    def _resolve_choice_key(choise, options, max_values):
+        if choise is None:
+            return None, -1
+
+        for i in range(1, max_values + 1):
+            if options.get(f"option{i}") == choise:
+                return f"value{i}", i - 1
+
+        return None, -1
+
+    @staticmethod
+    def _collect_options(kwargs, max_values):
+        options = {}
+
+        for i in range(1, max_values + 1):
+            options[f"option{i}"] = kwargs.get(
+                f"option{i}",
+                f"Option {i}",
+            )
+
+        return options
+
+    @classmethod
+    def validate_inputs(cls, *args, **kwargs) -> bool:
+        return True
+
+    @classmethod
+    def check_lazy_status(cls, choise="", values=nifty_core.MISSING, **kwargs):
+        if values is nifty_core.MISSING:
+            return []
+
+        options = cls._collect_options(kwargs, cls.MAX_VALUES)
+        key, _ = cls._resolve_choice_key(
+            choise,
+            options,
+            cls.MAX_VALUES,
+        )
+
+        if key is None or key not in values:
+            return []
+
+        if values[key] is None:
+            return [f"values.{key}"]
+
+        return []
+
+    @classmethod
+    def execute(cls, choise="", values=nifty_core.MISSING, **kwargs) -> io.NodeOutput:
+        options = cls._collect_options(kwargs, cls.MAX_VALUES)
+        key, index = cls._resolve_choice_key(
+            choise,
+            options,
+            cls.MAX_VALUES,
+        )
+
+        if values is nifty_core.MISSING or key is None or key not in values:
+            return io.NodeOutput(None, choise, choise, index)
+
+        return io.NodeOutput(
+            values.get(key),
+            choise,
+            choise,
+            index,
+        )
+
+
+# Index Combo Switch (Eager)
+class NiftyIndexComboSwitchEager(io.ComfyNode):
+    MAX_VALUES = 16
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        switch_template = io.MatchType.Template("switch")
+
+        autogrow_template = io.Autogrow.TemplateNames(
+            input=io.MatchType.Input(
+                "value",
+                template=switch_template,
+                optional=True,
+            ),
+            names=[f"value{i+1}" for i in range(cls.MAX_VALUES)],
+            min=2,
+        )
+
+        return io.Schema(
+            node_id="NiftyIndexComboSwitchEager",
+            display_name="Index Combo Switch (Eager)",
+            category=NODE_CATEGORY,
+            is_experimental=True,
+            search_aliases=[
+                "index input switch eager",
+                "indexed switch eager",
+                "select by index",
+                "multi input switch eager",
+                "numbered switch",
+                "combo switch",
+                "boolean combo",
+                "conditional combo",
+                "select combo",
+                "dropdown switch",
+            ],
+            inputs=[
+                io.Autogrow.Input(
+                    "values",
+                    template=autogrow_template,
+                    optional=True,
+                    tooltip="Auto-growing list of inputs. All inputs are always evaluated regardless of the selected index.",
+                ),
+                io.Combo.Input(
+                    "choise",
+                    options=[],
+                    default="",
+                    tooltip=f"Which value input to pass through, the order matches. The first choise = value1, second choise = value2 etc.",
+                ),
+                *[
+                    io.String.Input(
+                        f"option{i+1}",
+                        default=f"Option {i+1}",
+                        optional=True,
+                    )
+                    for i in range(cls.MAX_VALUES)
+                ],
+            ],
+            outputs=[
+                io.MatchType.Output(id="output", template=switch_template),
+                io.Combo.Output(),
+                io.String.Output(),
+                io.Int.Output(id="index"),
+            ],
+        )
+
+    @classmethod
+    def validate_inputs(cls, *args, **kwargs) -> bool:
+        return True
+
+    @classmethod
+    def execute(cls, choise="", values=nifty_core.MISSING, **kwargs) -> io.NodeOutput:
+        options = NiftyIndexComboSwitch._collect_options(
+            kwargs,
+            cls.MAX_VALUES,
+        )
+
+        key, index = NiftyIndexComboSwitch._resolve_choice_key(
+            choise,
+            options,
+            cls.MAX_VALUES,
+        )
+
+        if values is nifty_core.MISSING or key is None or key not in values:
+            return io.NodeOutput(None, choise, choise, index)
+
+        return io.NodeOutput(
+            values.get(key),
+            choise,
+            choise,
             index,
         )
 
@@ -1313,6 +1540,8 @@ LOGIC_CLASSES = {
     "NiftyFloatSwitch": NiftyFloatSwitch,
     "NiftyStringSwitch": NiftyStringSwitch,
     "NiftyComboSwitch": NiftyComboSwitch,
+    "NiftyIndexComboSwitch": NiftyIndexComboSwitch,
+    "NiftyIndexComboSwitchEager": NiftyIndexComboSwitchEager,
     "NiftyBooleanAND": NiftyBooleanAND,
     "NiftyBooleanANDAll": NiftyBooleanANDAll,
     "NiftyBooleanOR": NiftyBooleanOR,
