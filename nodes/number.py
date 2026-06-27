@@ -7,8 +7,6 @@ NODE_CATEGORY = "nifty/number"
 
 # Seed
 class NiftySeed(io.ComfyNode):
-    MAX_SEED = 1125899906842624
-
     @classmethod
     def define_schema(cls) -> io.Schema:
         return io.Schema(
@@ -28,9 +26,10 @@ class NiftySeed(io.ComfyNode):
                     "seed",
                     default=0,
                     min=0,
-                    max=cls.MAX_SEED,
+                    max=1 << 50,
                     control_after_generate=False,
                 ),
+                io.Custom("NIFTY_SEED_ACTIONS").Input("seed_actions"),
             ],
             outputs=[
                 io.Int.Output(id="seed"),
@@ -38,18 +37,11 @@ class NiftySeed(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, seed) -> io.NodeOutput:
-        try:
-            seed = int(seed)
-        except (ValueError, TypeError):
-            seed = 0
-
-        seed = max(0, min(seed, cls.MAX_SEED))
-
+    def execute(cls, seed, **kwargs) -> io.NodeOutput:
         return io.NodeOutput(seed)
 
 
-# Nifty Math
+# Math
 class NiftyMath(io.ComfyNode):
     MAX_SLOTS = 16
     SLOT_LETTERS = list(_string.ascii_lowercase[:16])
