@@ -63,7 +63,7 @@ class NiftyClipSelector(io.ComfyNode):
 
         return io.Schema(
             node_id="NiftyClipSelector",
-            display_name="Clip Selector",
+            display_name="CLIP Selector",
             category=NODE_CATEGORY,
             search_aliases=[
                 "clip selector",
@@ -94,6 +94,54 @@ class NiftyClipSelector(io.ComfyNode):
             clip_name,
             clip_name.lower().endswith(".gguf"),
         )
+
+
+# Clip Type selector
+class NiftyClipTypeSelector(io.ComfyNode):
+    clip_types = [
+        "stable_diffusion",
+        "stable_cascade",
+        "sd3",
+        "stable_audio",
+        "mochi",
+        "ltxv",
+        "pixart",
+        "cosmos",
+        "lumina2",
+        "wan",
+        "hidream",
+        "chroma",
+        "ace",
+        "omnigen2",
+        "qwen_image",
+        "hunyuan_image",
+        "flux2",
+        "ovis",
+        "longcat_image",
+    ]
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="NiftyClipTypeSelector",
+            display_name="CLIP Type Selector",
+            category=NODE_CATEGORY,
+            search_aliases=["clip type selector", "clip type", "clip"],
+            inputs=[
+                io.Combo.Input(
+                    "type",
+                    options=cls.clip_types,
+                    tooltip="Select a clip type to pass as a string to a CLIP loader.",
+                ),
+            ],
+            outputs=[
+                io.AnyType.Output(id="type"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, type) -> io.NodeOutput:
+        return io.NodeOutput(type)
 
 
 # Sampler selector
@@ -162,6 +210,7 @@ class NiftySchedulerSelector(io.ComfyNode):
 SELECTOR_CLASSES = {
     "NiftyDiffusionModelSelector": NiftyDiffusionModelSelector,
     "NiftyClipSelector": NiftyClipSelector,
+    "NiftyClipTypeSelector": NiftyClipTypeSelector,
     "NiftySamplerSelector": NiftySamplerSelector,
     "NiftySchedulerSelector": NiftySchedulerSelector,
 }
